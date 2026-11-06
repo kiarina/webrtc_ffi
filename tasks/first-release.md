@@ -6,11 +6,12 @@
 
 - macOS（arm64）・Linux（Docker、arm64）・Windows（x64）で `dart test` が通り、Chrome 156 とデータ・H.264・Opus を両方向でやりとりできた
 - `dart build cli` で AOT の CLI にでき、Windows の DLL は WS2_32・bcrypt・KERNEL32 だけに依存する
+- 実際の使い手で確かめた: Spirits Garden の body の CLI（データチャネル `nerve`、Trickle ICE）が、アプリ（flutter_webrtc）の spirit とつながり、
+  spirit から使われた。Docker Desktop for Mac のコンテナの中の AOT の CLI（Linux arm64）からもつながった。API を直すところは無かった
 
 ## やること
 
-- 実際の使い手で API を確かめる: Spirits Garden の body の CLI を作り、アプリのシグナリング（Trickle ICE、`nerve`）と spirit・console につなぐ。
-  使いにくいところを 0.1.0 の前に直す
+- メディアのトラックは、まだ実際の使い手で確かめていない（body の CLI はデータチャネルだけ）
 - aiortc（spirit host）との接続をこのパッケージのテストか道具に入れる（lab では libdatachannel と aiortc で確かめたが、このパッケージの形ではまだ）
 - Linux の x64、macOS の x64、Windows の arm64 は未確認
 - Android・iOS（NDK・Xcode の組み立て、hook の分岐）は 0.1.0 に入れるか決める
