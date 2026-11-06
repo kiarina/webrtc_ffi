@@ -1,0 +1,11 @@
+# .pubignore replaces .gitignore for the archive, so the build outputs must be listed here too.
+build/
+.dart_tool/
+pubspec.lock
+.DS_Store
+tasks/
+AGENTS.md
+CLAUDE.md
+tool/docker/
+.dockerignore
+__pycache__/

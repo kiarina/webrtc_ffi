@@ -1,0 +1,77 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>webrtc_ffi interop</title>
+<video id="v" autoplay muted playsinline></video>
+<audio id="a" autoplay></audio>
+<script>
+// Answers the Dart side's offer: echoes the data channel, sends the fake
+// camera and microphone on the m-lines Dart receives on, and plays what Dart
+// sends back. Reports decoding stats when asked.
+const ws = new WebSocket(`ws://${location.host}/ws`);
+const send = (m) => ws.send(JSON.stringify(m));
+window.onerror = (e) => send({k: 'log', text: String(e)});
+window.onunhandledrejection = (e) => send({k: 'log', text: String(e.reason)});
+const pc = new RTCPeerConnection();
+const media = navigator.mediaDevices.getUserMedia({
+  video: {width: 640, height: 480, frameRate: 30},
+  audio: true,
+});
+
+pc.onicecandidate = (e) => {
+  if (e.candidate) send({k: 'cand', ...e.candidate.toJSON()});
+};
+pc.onconnectionstatechange = () => send({k: 'log', text: 'pc ' + pc.connectionState});
+pc.ondatachannel = (e) => {
+  const dc = e.channel;
+  dc.binaryType = 'arraybuffer';
+  dc.onmessage = (m) => dc.send(m.data);
+};
+const back = new MediaStream();
+pc.ontrack = (e) => {
+  if (e.transceiver.mid === 'v-out' || e.transceiver.mid === 'a-out') {
+    back.addTrack(e.track);
+    document.getElementById(e.track.kind === 'video' ? 'v' : 'a').srcObject = back;
+  }
+};
+
+const pending = [];
+let described = false;
+ws.onopen = () => send({k: 'hello', ua: navigator.userAgent.match(/Chrome\/[\d.]+/)?.[0]});
+ws.onmessage = async (ev) => {
+  const m = JSON.parse(ev.data);
+  if (m.k === 'desc') {
+    await pc.setRemoteDescription({type: m.type, sdp: m.sdp});
+    described = true;
+    for (const c of pending.splice(0)) await pc.addIceCandidate(c);
+    if (m.type === 'offer') {
+      const stream = await media;
+      for (const t of pc.getTransceivers()) {
+        const kind = t.receiver.track.kind;
+        if (t.mid === 'v-in' || t.mid === 'a-in') {
+          t.direction = 'sendonly';
+          await t.sender.replaceTrack(stream.getTracks().find((x) => x.kind === kind));
+        }
+      }
+      await pc.setLocalDescription(await pc.createAnswer());
+      send({k: 'desc', type: 'answer', sdp: pc.localDescription.sdp});
+    }
+  } else if (m.k === 'cand') {
+    const c = {candidate: m.candidate, sdpMid: m.sdpMid, sdpMLineIndex: m.sdpMLineIndex};
+    described ? await pc.addIceCandidate(c) : pending.push(c);
+  } else if (m.k === 'stats') {
+    const r = {k: 'stats'};
+    (await pc.getStats()).forEach((s) => {
+      if (s.type !== 'inbound-rtp') return;
+      if (s.kind === 'video') {
+        r.video_frames_decoded = s.framesDecoded;
+        r.video_width = s.frameWidth;
+        r.video_height = s.frameHeight;
+      } else if (s.kind === 'audio') {
+        r.audio_samples = s.totalSamplesReceived;
+        r.audio_concealed = s.concealedSamples;
+      }
+    });
+    send(r);
+  }
+};
+</script>
